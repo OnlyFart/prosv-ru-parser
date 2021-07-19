@@ -4,8 +4,8 @@ from urllib.parse import parse_qs
 import requests
 from bs4 import BeautifulSoup as bs
 
-URL = "https://shop.prosv.ru/katalog?pagenumber={}"
 BASE = "https://shop.prosv.ru/"
+URL_PATTERN = urlparse.urljoin(BASE, "/katalog?pagenumber={}")
 HEADERS = {
     "user-agent": "Chrome",
     "accept": '*/*'
@@ -27,10 +27,13 @@ def get_links(url):
 
 
 def get_max_pages():
-    soup = get_soup(URL.format(1))
+    soup = get_soup(URL_PATTERN.format(1))
     a = soup.select_one("li.last-page > a")
-    url = urlparse.urlparse(urlparse.urljoin(BASE, a.get('href')))
-    return int(parse_qs(url.query)['pagenumber'][0])
+    if a:
+        url = urlparse.urlparse(urlparse.urljoin(BASE, a.get('href')))
+        return int(parse_qs(url.query)['pagenumber'][0])
+    else:
+        return 1
 
 
 def get_book(url):
@@ -44,6 +47,14 @@ def get_book(url):
     annotation = soup.select_one('div.full-description-text')
     if annotation:
         res['Аннтотация'] = annotation.text.strip()
+
+    your_price = soup.select_one('span[class^=price-value]')
+    if your_price:
+        res['Ваша цена'] = your_price.text.strip()
+
+    non_discount_price = soup.select_one('div.non-discounted-price > span')
+    if non_discount_price:
+        res['Цена без скидки'] = non_discount_price.text.strip()
 
     for series in soup.select('div.series'):
         name = series.findChildren()[0].text.strip().strip(':')
@@ -60,10 +71,10 @@ def get_book(url):
 
 def parse():
     books = []
-    max_page = get_max_pages() + 1
-    for i in range(1, max_page):
-        url = URL.format(i)
-        print(f"Обрабатываю страницу {i} из {max_page} ...")
+    max_page = get_max_pages()
+    for i in range(1, max_page + 1):
+        url = URL_PATTERN.format(i)
+        print(f"Обрабатываю страницу {i} из {max_page}...")
         links = get_links(url)
         for link in links:
             book = get_book(link)
