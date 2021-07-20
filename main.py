@@ -2,6 +2,7 @@ import csv
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
 import requests
+import re
 from bs4 import BeautifulSoup as bs
 
 BASE = "https://shop.prosv.ru/"
@@ -36,35 +37,25 @@ def get_max_pages():
         return 1
 
 
+def set_property(book, name, block):
+    if block:
+        book[re.sub(' +', ' ', name.strip().strip(':'))] = re.sub(' +', ' ', block.text.strip())
+
+
 def get_book(url):
     soup = get_soup(url)
     res = {
-        'Название': soup.select_one("h1").text.strip(),
         'Изображение': urlparse.urljoin(BASE, soup.select_one("img[id^=main-product-img]").get('src')),
         'Url': url
     }
 
-    annotation = soup.select_one('div.full-description-text')
-    if annotation:
-        res['Аннтотация'] = annotation.text.strip()
+    set_property(res, 'Название', soup.select_one("h1"))
+    set_property(res, 'Аннотация', soup.select_one('div.full-description-text'))
+    set_property(res, 'Ваша цена', soup.select_one('span[class^=price-value]'))
+    set_property(res, 'Цена без скидки', soup.select_one('div.non-discounted-price > span'))
 
-    your_price = soup.select_one('span[class^=price-value]')
-    if your_price:
-        res['Ваша цена'] = your_price.text.strip()
-
-    non_discount_price = soup.select_one('div.non-discounted-price > span')
-    if non_discount_price:
-        res['Цена без скидки'] = non_discount_price.text.strip()
-
-    for series in soup.select('div.series'):
-        name = series.findChildren()[0].text.strip().strip(':')
-        value = series.findChildren()[1].text.strip()
-        res[name] = value
-
-    for row in soup.select('table.data-table tr'):
-        name = row.findChildren()[0].text.strip()
-        value = row.findChildren()[1].text.strip()
-        res[name] = value
+    for series in soup.select('div.series, table.data-table tr'):
+        set_property(res, series.findChildren()[0].text, series.findChildren()[1])
 
     return res
 
