@@ -68,11 +68,9 @@ async def get_books(session: aiohttp.ClientSession,):
     books = []
     max_page = await get_max_pages(session)
     for i in range(1, max_page + 1):
-        url = URL_PATTERN.format(i)
         print(f"Обрабатываю страницу {i} из {max_page}...")
-        links = await get_links(session, url)
         tasks = []
-        for link in links:
+        for link in await get_links(session, URL_PATTERN.format(i)):
             tasks.append(get_book(session, link))
         books.extend(await asyncio.gather(*tasks))
 
@@ -93,8 +91,7 @@ def save(books):
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        books = await get_books(session)
-        save(books)
+        save(await get_books(session))
 
 
 if '__main__' == __name__:
