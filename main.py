@@ -1,34 +1,38 @@
 import csv
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
-import requests
+import asyncio
+import aiohttp
 import re
 from bs4 import BeautifulSoup as bs
+from aiohttp import ClientSession
 
 BASE = "https://shop.prosv.ru/"
 URL_PATTERN = urlparse.urljoin(BASE, "/katalog?pagenumber={}")
 HEADERS = {
-    "user-agent": "Chrome",
-    "accept": '*/*'
+    "user-agent": "Chrome"
 }
 
 
-def get_soup(url):
-    r = requests.get(url, headers=HEADERS)
-    return bs(r.content, 'html.parser')
+async def get_soup(session: ClientSession, url: str) -> bs:
+    r = await session.get(url, headers=HEADERS)
+    return bs(await r.text(), 'html.parser')
 
 
-def get_links(url):
-    soup = get_soup(url)
+async def get_links(session: ClientSession, url: str):
+    soup = await get_soup(session, url)
     items = soup.select(".item-box .picture > a")
+    links = []
     for item in items:
         href = item.get('href')
         if href:
-            yield urlparse.urljoin(BASE, href)
+            links.append(urlparse.urljoin(BASE, href))
+
+    return links
 
 
-def get_max_pages():
-    soup = get_soup(URL_PATTERN.format(1))
+async def get_max_pages(session: aiohttp.ClientSession) -> int:
+    soup = await get_soup(session, URL_PATTERN.format(1))
     a = soup.select_one("li.last-page > a")
     if a:
         url = urlparse.urlparse(urlparse.urljoin(BASE, a.get('href')))
@@ -37,13 +41,13 @@ def get_max_pages():
         return 1
 
 
-def set_property(book, name, block):
+def set_property(book, name, block) -> None:
     if block:
         book[re.sub(' +', ' ', name.strip().strip(':'))] = re.sub(' +', ' ', block.text.strip())
 
 
-def get_book(url):
-    soup = get_soup(url)
+async def get_book(session: aiohttp.ClientSession, url: str):
+    soup = await get_soup(session, url)
     res = {
         'Изображение': urlparse.urljoin(BASE, soup.select_one("img[id^=main-product-img]").get('src')),
         'Url': url
@@ -60,17 +64,22 @@ def get_book(url):
     return res
 
 
-def parse():
+async def get_books(session: aiohttp.ClientSession,):
     books = []
-    max_page = get_max_pages()
+    max_page = await get_max_pages(session)
     for i in range(1, max_page + 1):
         url = URL_PATTERN.format(i)
         print(f"Обрабатываю страницу {i} из {max_page}...")
-        links = get_links(url)
+        links = await get_links(session, url)
+        tasks = []
         for link in links:
-            book = get_book(link)
-            books.append(book)
+            tasks.append(get_book(session, link))
+        books.extend(await asyncio.gather(*tasks))
 
+    return books
+
+
+def save(books):
     keys = set()
     for book in books:
         for key in book.keys():
@@ -82,5 +91,11 @@ def parse():
         w.writerows(books)
 
 
+async def main():
+    async with aiohttp.ClientSession() as session:
+        books = await get_books(session)
+        save(books)
+
+
 if '__main__' == __name__:
-    parse()
+    asyncio.run(main())
