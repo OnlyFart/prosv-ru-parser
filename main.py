@@ -82,4 +82,5 @@ def parse():
         w.writerows(books)
 
 
-parse()
+if '__main__' == __name__:
+    parse()
