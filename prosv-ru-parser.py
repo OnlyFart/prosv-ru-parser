@@ -64,7 +64,7 @@ async def get_book(session: aiohttp.ClientSession, url: str):
     return res
 
 
-async def get_books(session: aiohttp.ClientSession,):
+async def get_books(session: aiohttp.ClientSession):
     books = []
     max_page = await get_max_pages(session)
     for i in range(1, max_page + 1):
@@ -83,8 +83,8 @@ def save(books):
         for key in book.keys():
             keys.add(key)
 
-    with open("res.csv", 'w') as f:
-        w = csv.DictWriter(f, keys)
+    with open("res.csv", 'w', encoding="utf-8") as f:
+        w = csv.DictWriter(f, keys, delimiter='\t')
         w.writeheader()
         w.writerows(books)
 
@@ -95,4 +95,5 @@ async def main():
 
 
 if '__main__' == __name__:
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
